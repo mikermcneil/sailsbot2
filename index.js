@@ -1,14 +1,14 @@
 // sailsbot2, electric boogaloo
 
 let _ = require('lodash');
+let Process = require('machinepack-process').customize({arginStyle:'serial'});
 
-
-let SIMULATION_LENGTH = 500;
-let SIMULATION_FRAME_RATE_MS = 10;
+let SIMULATION_LENGTH = 50;
+let SIMULATION_FRAME_RATE_MS = 1;
 
 let BASE_SALIENCE_BOOST = 1;
 let MAX_SALIENCE = 255;
-let NEW_LEARNING_RATE_PERCENT = 75;
+let NEW_LEARNING_RATE_PERCENT = 25;
 let GOOF_STANDARD_PROBABILITY_PERCENT = 95;
 let GOOF_FOREGROUND_PROBABILITY_PERCENT = 99;
 
@@ -88,13 +88,18 @@ async function think(stimulus) {
   let prevSrl = _.sample(Object.keys(memoriesBySrl).filter((srl) => srl.match(/^¡/))) || _.sample(Object.keys(memoriesBySrl));//« a random foreground memory, or failing that, a random memory
 
   let distractedness = 0;
-  for (let step=0; step<80; step++) {
+  for (let step=0; step<800; step++) {
 
     if (distractedness > (step*4*Math.random()) + 5) {
       break;
     }
 
     process.stdout.write(`${_.repeat(' ', Math.max(1,Math.floor(distractedness)))}${step === 0? '•' :'·'} ${srl}`);
+    if (step === 0) {
+      await Process.executeCommand(`say -v oliver '${srl.replace(/[^A-z\s]/g,'')}'`);
+    } else {
+      await Process.executeCommand(`say -v agnes '${srl.replace(/[^A-z\s]/g,'')}'`);
+    }
 
     let isInForeground = recognize(!srl.match(/^¡+/)? `¡${srl}` :srl);
 
@@ -125,7 +130,12 @@ async function think(stimulus) {
 
 
     process.stdout.write(`${didGoof? '…' :''}`);
-    console.log('');
+    if (didGoof) {
+      await Process.executeCommand(`say -v agnes 'yup...'`);
+      // await Process.executeCommand(`say -v whisper 'oo'`);
+    }//ﬁ
+    await pause(SIMULATION_FRAME_RATE_MS*3);
+    console.log();
 
     prevSrl = srl;
     srl = nextSrl;
@@ -148,7 +158,8 @@ async function perceive(srl, prevSrl) {
   // console.log(`perceive (srl: "${srl}")  recollections:`, recollections);
 
   if (!recollections) {
-    fixate(srl, prevSrl);
+    if (!recognize(srl)) { await Process.executeCommand(`say -v agnes 'oh'`); }
+    await fixate(srl, prevSrl);
     return;
   }//•
 
@@ -158,7 +169,7 @@ async function perceive(srl, prevSrl) {
   // ```
   //
   // new way:
-  let recollection;
+  let recollectedSrl;
   let salienceLevels = _.sortBy(Object.keys(recollections).map((salience) => Number(salience)));
   let highestRoll;
   let levelWithHighestRoll;
@@ -173,16 +184,17 @@ async function perceive(srl, prevSrl) {
     }
   }//∞
 
-  recollection = recollections[`${levelWithHighestRoll}`];
+  recollectedSrl = recollections[`${levelWithHighestRoll}`];
 
-  if (!recollection) {
+  if (!recollectedSrl) {
     return;
   }
 
   await pause(SIMULATION_FRAME_RATE_MS*7);
-  fixate(recollection, srl);
+  if (!recognize(recollectedSrl)) { await Process.executeCommand(`say -v agnes 'huh'`); }
+  await fixate(recollectedSrl, srl);
 
-  return recollection;
+  return recollectedSrl;
 
 }
 
@@ -192,7 +204,7 @@ function recognize(srl) {
   return recollections;
 }
 
-function fixate(fixationSrl, prevSrl, salienceBoost=BASE_SALIENCE_BOOST) {
+async function fixate(fixationSrl, prevSrl, salienceBoost=BASE_SALIENCE_BOOST) {
 
   if (!recognize(prevSrl)){
     let newMemory;
@@ -215,9 +227,15 @@ function fixate(fixationSrl, prevSrl, salienceBoost=BASE_SALIENCE_BOOST) {
   let idx = Object.values(recognize(prevSrl)).indexOf(fixationSrl);
   // require('assert')(idx !== -1, 'what happened?  it was there a second ago, right?');
   if (idx === -1) {
+    // TODO: Do learn check here
     recognize(prevSrl)[Math.max(salienceBoost, Math.min(MAX_SALIENCE, Math.round(salienceBoost*2*Math.random())))] = fixationSrl;
+    await Process.executeCommand(`say -v agnes 'oooh, ..!'`);
+    // TODO: also do the opposite, but only if learn check passes
   } else {
+
     // Increase salience
+    // TODO: Do learn check here
+    // TODO: also do the opposite, but only if learn check passes
     let formerSalience = Number(Object.keys(recognize(prevSrl))[idx]);
     let higherSalience = Math.max(salienceBoost, Math.min(MAX_SALIENCE, Math.round(formerSalience + salienceBoost*2*Math.random())));
     let swappedSrl = recognize(prevSrl)[higherSalience];
@@ -227,6 +245,8 @@ function fixate(fixationSrl, prevSrl, salienceBoost=BASE_SALIENCE_BOOST) {
     } else {
       delete recognize(prevSrl)[formerSalience];
     }
+    // await Process.executeCommand(`say -v agnes 'ah'`);
+    // await Process.executeCommand(`say -v whisper 'oo'`);
     // FUTURE: Introduce a deliberate, small % chance of forgetting other adjacent things
   }
 
