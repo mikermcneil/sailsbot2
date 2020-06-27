@@ -3,7 +3,7 @@
 let _ = require('lodash');
 let Process = require('machinepack-process').customize({arginStyle:'serial'});
 
-let SIMULATION_LENGTH = 50;
+let SIMULATION_LENGTH = 2500;
 let SIMULATION_FRAME_RATE_MS = 1;
 
 let BASE_SALIENCE_BOOST = 1;
@@ -21,15 +21,17 @@ try {
   require('assert')(_.isObject(memoriesBySrl));
 } catch (unusedErr) {
   memoriesBySrl = {
+
     'coffee maker': {[MAX_SALIENCE]:'chrome',89:'bitter',88:'gold tape',60:'gurgling'},
     // ^srl          ^salience (Ω)
 
-    'gold tape': {100:'mike',10:'sticky'},
+    'treat bag': {200:'interesting'},
+    'gold tape': {100:'mike',10:'sticky',1:'interesting'},
     'sticky': {150:'unpleasant'},
     'eric\'s voice': {100:'footsteps',30:'opening door',5:'treat bag'},
     'opening door': {60:'footsteps',20:'terror',5:'rachael'},
     'footsteps': {30:'terror',5:'rachael'},
-    'rachael': {209:'treat bag'},
+    'rachael': {209:'treat bag', 10:'interesting'},
     'terror': {5:'fireworks',3:'eric\'s voice'},
   };
 
@@ -53,11 +55,12 @@ try {
   await think('rachael');
   for (let i=0; i<SIMULATION_LENGTH; i++){
     let srl;
-    if (2 > 10*Math.random()) {
+    if (1 > 10*Math.random()) {
       srl = require('faker').company.catchPhraseNoun();
     } else {
       srl = _.sample(Object.keys(memoriesBySrl));
     }
+    // TODO: make random stimuli more realistic and cat-related
 
     await think(srl);
   }//∞
@@ -118,6 +121,7 @@ async function think(stimulus) {
       }
 
       if (didGoof) {
+        // FUTURE: prefer foregrounded memories on goof
         nextSrl = _.sample(Object.keys(memoriesBySrl));
       } else {
         nextSrl = await perceive(srl, prevSrl);
@@ -126,7 +130,12 @@ async function think(stimulus) {
         //   nextSrl = prevSrl;
         // }//ﬁ
       }
+
+      if (['interesting'].includes(nextSrl))  {
+        nextSrl = srl;
+      }
     }//∞
+
 
 
     process.stdout.write(`${didGoof? '…' :''}`);
@@ -205,6 +214,10 @@ function recognize(srl) {
 }
 
 async function fixate(fixationSrl, prevSrl, salienceBoost=BASE_SALIENCE_BOOST) {
+
+  if (fixationSrl === 'interesting') {
+    salienceBoost *= 4;
+  }
 
   if (!recognize(prevSrl)){
     let newMemory;
